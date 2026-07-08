@@ -14,7 +14,9 @@ export default defineConfig({
         'icons/icon-192.png',
         'icons/icon-512.png',
         'icons/icon-maskable-512.png',
-        'visuals/needle.png'
+        'visuals/needle.png',
+        'visuals/vibration.png',
+        'visuals/wake-lock.png'
       ],
       manifest: {
         name: 'mojmonom',

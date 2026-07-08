@@ -80,7 +80,7 @@ button:disabled {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 18px;
+  gap: 10px;
   min-height: 64px;
   margin: 0 -14px;
   padding: 10px 14px;
@@ -90,7 +90,7 @@ button:disabled {
 
 .brand-wordmark {
   display: block;
-  width: min(48vw, 172px);
+  width: min(42vw, 172px);
   height: auto;
   filter: brightness(0) invert(1);
 }
@@ -98,7 +98,7 @@ button:disabled {
 .header-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .header-icon-button {
@@ -422,14 +422,16 @@ input[type="range"]::-moz-range-thumb {
   content: none;
 }
 
-.vibration-icon {
+.vibration-icon,
+.wake-lock-icon {
   width: 24px;
   height: 24px;
   object-fit: contain;
   filter: brightness(0) invert(1);
 }
 
-.header-icon-button.is-active .vibration-icon {
+.header-icon-button.is-active .vibration-icon,
+.header-icon-button.is-active .wake-lock-icon {
   filter: none;
 }
 

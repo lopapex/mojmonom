@@ -8,6 +8,17 @@ type BeforeInstallPromptEvent = Event & {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
 };
 
+type WakeLockSentinel = EventTarget & {
+  released: boolean;
+  release: () => Promise<void>;
+};
+
+type WakeLockNavigator = Navigator & {
+  wakeLock?: {
+    request: (type: 'screen') => Promise<WakeLockSentinel>;
+  };
+};
+
 const MIN_BPM = 40;
 const MAX_BPM = 240;
 const VIBRATION_MS = 35;
@@ -17,6 +28,7 @@ type SavedSettings = {
   bpm?: number;
   view?: ViewMode;
   vibration?: boolean;
+  keepAwake?: boolean;
 };
 
 function loadSettings(): Required<SavedSettings> {
@@ -25,10 +37,11 @@ function loadSettings(): Required<SavedSettings> {
     return {
       bpm: clampBpm(parsed.bpm ?? 120),
       view: parsed.view === 'circle' ? 'circle' : 'needle',
-      vibration: Boolean(parsed.vibration)
+      vibration: Boolean(parsed.vibration),
+      keepAwake: Boolean(parsed.keepAwake)
     };
   } catch {
-    return { bpm: 120, view: 'needle', vibration: false };
+    return { bpm: 120, view: 'needle', vibration: false, keepAwake: false };
   }
 }
 
@@ -38,6 +51,10 @@ function clampBpm(value: number) {
 
 function supportsVibration() {
   return typeof navigator !== 'undefined' && 'vibrate' in navigator;
+}
+
+function supportsWakeLock() {
+  return typeof navigator !== 'undefined' && 'wakeLock' in navigator;
 }
 
 function isMobileLikeDevice() {
@@ -60,21 +77,78 @@ export default function App() {
   const [bpm, setBpm] = useState(initialSettings.bpm);
   const [view, setView] = useState<ViewMode>(initialSettings.view);
   const [vibration, setVibration] = useState(initialSettings.vibration);
+  const [keepAwake, setKeepAwake] = useState(initialSettings.keepAwake);
   const [isRunning, setIsRunning] = useState(false);
   const [lastBeatAt, setLastBeatAt] = useState<number | null>(null);
   const [beatIndex, setBeatIndex] = useState(0);
   const [now, setNow] = useState(() => performance.now());
   const [isMobileDevice, setIsMobileDevice] = useState(isMobileLikeDevice);
   const [vibrationAvailable, setVibrationAvailable] = useState(supportsVibration);
+  const [wakeLockAvailable, setWakeLockAvailable] = useState(supportsWakeLock);
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isStandalone, setIsStandalone] = useState(isStandalonePwa);
   const vibrationSupported = vibrationAvailable && isMobileDevice;
+  const wakeLockSupported = wakeLockAvailable && isMobileDevice;
   const engineRef = useRef<MetronomeEngine | null>(null);
   const vibrationRef = useRef(vibration);
+  const wakeLockRef = useRef<WakeLockSentinel | null>(null);
+  const keepAwakeRef = useRef(keepAwake);
 
   useEffect(() => {
     vibrationRef.current = vibration && vibrationSupported;
   }, [vibration, vibrationSupported]);
+
+  useEffect(() => {
+    keepAwakeRef.current = keepAwake && wakeLockSupported;
+  }, [keepAwake, wakeLockSupported]);
+
+  async function requestWakeLock() {
+    if (!wakeLockSupported || wakeLockRef.current || document.visibilityState !== 'visible') return false;
+
+    try {
+      const sentinel = await (navigator as WakeLockNavigator).wakeLock?.request('screen');
+      if (!sentinel) return false;
+
+      wakeLockRef.current = sentinel;
+      sentinel.addEventListener('release', () => {
+        wakeLockRef.current = null;
+      });
+      return true;
+    } catch {
+      wakeLockRef.current = null;
+      setWakeLockAvailable(false);
+      setKeepAwake(false);
+      return false;
+    }
+  }
+
+  async function releaseWakeLock() {
+    const sentinel = wakeLockRef.current;
+    wakeLockRef.current = null;
+    await sentinel?.release().catch(() => undefined);
+  }
+
+  useEffect(() => {
+    if (keepAwake && wakeLockSupported) {
+      void requestWakeLock();
+    } else {
+      void releaseWakeLock();
+    }
+  }, [keepAwake, wakeLockSupported]);
+
+  useEffect(() => {
+    const restoreWakeLock = () => {
+      if (document.visibilityState === 'visible' && keepAwakeRef.current) {
+        void requestWakeLock();
+      }
+    };
+
+    document.addEventListener('visibilitychange', restoreWakeLock);
+    return () => {
+      document.removeEventListener('visibilitychange', restoreWakeLock);
+      void releaseWakeLock();
+    };
+  }, []);
 
   useEffect(() => {
     const media = window.matchMedia('(hover: none) and (pointer: coarse)');
@@ -130,8 +204,8 @@ export default function App() {
   }, [bpm]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ bpm, view, vibration }));
-  }, [bpm, view, vibration]);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ bpm, view, vibration, keepAwake }));
+  }, [bpm, view, vibration, keepAwake]);
 
   useEffect(() => {
     let frame = 0;
@@ -197,6 +271,22 @@ export default function App() {
     setVibration(nextVibration);
   }
 
+  async function toggleKeepAwake() {
+    if (!wakeLockSupported) return;
+
+    if (keepAwake) {
+      setKeepAwake(false);
+      await releaseWakeLock();
+      return;
+    }
+
+    setKeepAwake(true);
+    const didLock = await requestWakeLock();
+    if (!didLock) {
+      setKeepAwake(false);
+    }
+  }
+
   async function installApp() {
     if (isStandalone || !installPrompt) return;
 
@@ -221,6 +311,18 @@ export default function App() {
                 title={vibration ? 'Vypnout vibrace' : 'Zapnout vibrace'}
               >
                 <img className="vibration-icon" src="/visuals/vibration.png" alt="" draggable="false" />
+              </button>
+            )}
+            {wakeLockSupported && (
+              <button
+                type="button"
+                className={keepAwake ? 'header-icon-button is-active' : 'header-icon-button'}
+                onClick={toggleKeepAwake}
+                aria-pressed={keepAwake}
+                aria-label={keepAwake ? 'Povolit zamykani telefonu' : 'Nechat displej zapnuty'}
+                title={keepAwake ? 'Povolit zamykani telefonu' : 'Nechat displej zapnuty'}
+              >
+                <img className="wake-lock-icon" src="/visuals/wake-lock.png" alt="" draggable="false" />
               </button>
             )}
             {!isStandalone && installPrompt && (
