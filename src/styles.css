@@ -130,9 +130,10 @@ button:disabled {
 }
 
 .visual-stage {
-  min-height: 250px;
+  height: clamp(250px, 38dvh, 318px);
   display: grid;
   place-items: center;
+  overflow: visible;
 }
 
 .circle-view,
@@ -146,11 +147,6 @@ button:disabled {
 
 .visual-mode {
   animation: mode-flash 180ms ease-out both;
-}
-
-.needle-view {
-  width: min(82vw, 340px);
-  aspect-ratio: 0.82;
 }
 
 @keyframes mode-flash {
@@ -188,10 +184,10 @@ button:disabled {
 
 .needle {
   position: absolute;
-  bottom: 20%;
+  bottom: 18%;
   left: 50%;
   width: 4px;
-  height: 60%;
+  height: 68%;
   border-radius: 3px;
   background: var(--ink);
   transform-origin: 50% 100%;
@@ -212,7 +208,7 @@ button:disabled {
 
 .needle-base {
   position: absolute;
-  bottom: 17%;
+  bottom: 15%;
   width: 34px;
   aspect-ratio: 1;
   border: 8px solid var(--ink);
@@ -516,16 +512,12 @@ input[type="range"]::-moz-range-thumb {
   }
 
   .visual-stage {
-    min-height: 180px;
+    height: clamp(190px, 33dvh, 250px);
   }
 
   .circle-view,
   .needle-view {
     width: min(62vw, 240px);
-  }
-
-  .needle-view {
-    width: min(68vw, 270px);
   }
 }
 

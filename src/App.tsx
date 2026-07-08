@@ -10,6 +10,7 @@ type BeforeInstallPromptEvent = Event & {
 
 const MIN_BPM = 40;
 const MAX_BPM = 240;
+const VIBRATION_MS = 35;
 const STORAGE_KEY = 'mojmonom.settings';
 
 type SavedSettings = {
@@ -64,9 +65,10 @@ export default function App() {
   const [beatIndex, setBeatIndex] = useState(0);
   const [now, setNow] = useState(() => performance.now());
   const [isMobileDevice, setIsMobileDevice] = useState(isMobileLikeDevice);
+  const [vibrationAvailable, setVibrationAvailable] = useState(supportsVibration);
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isStandalone, setIsStandalone] = useState(isStandalonePwa);
-  const vibrationSupported = supportsVibration() && isMobileDevice;
+  const vibrationSupported = vibrationAvailable && isMobileDevice;
   const engineRef = useRef<MetronomeEngine | null>(null);
   const vibrationRef = useRef(vibration);
 
@@ -107,7 +109,12 @@ export default function App() {
       setLastBeatAt(performance.now());
       setBeatIndex(index);
       if (vibrationRef.current) {
-        navigator.vibrate(12);
+        const didVibrate = navigator.vibrate(VIBRATION_MS);
+        if (!didVibrate) {
+          vibrationRef.current = false;
+          setVibration(false);
+          setVibrationAvailable(false);
+        }
       }
     });
     engineRef.current = engine;
@@ -172,6 +179,24 @@ export default function App() {
     setBpm(clampBpm(value));
   }
 
+  function toggleVibration() {
+    if (!vibrationSupported) return;
+
+    const nextVibration = !vibration;
+    if (nextVibration) {
+      const didVibrate = navigator.vibrate(VIBRATION_MS);
+      if (!didVibrate) {
+        setVibration(false);
+        setVibrationAvailable(false);
+        return;
+      }
+    } else {
+      navigator.vibrate(0);
+    }
+
+    setVibration(nextVibration);
+  }
+
   async function installApp() {
     if (isStandalone || !installPrompt) return;
 
@@ -190,7 +215,7 @@ export default function App() {
               <button
                 type="button"
                 className={vibration ? 'header-icon-button is-active' : 'header-icon-button'}
-                onClick={() => setVibration(!vibration)}
+                onClick={toggleVibration}
                 aria-pressed={vibration}
                 aria-label={vibration ? 'Vypnout vibrace' : 'Zapnout vibrace'}
                 title={vibration ? 'Vypnout vibrace' : 'Zapnout vibrace'}
