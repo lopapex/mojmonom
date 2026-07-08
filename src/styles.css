@@ -53,6 +53,7 @@ button:disabled {
   height: 100dvh;
   height: 100svh;
   display: flex;
+  align-items: center;
   justify-content: center;
   padding:
     max(9px, env(safe-area-inset-top))
@@ -66,6 +67,7 @@ button:disabled {
 .metronome-panel {
   width: min(100%, 430px);
   height: calc(100dvh - max(9px, env(safe-area-inset-top)) - max(18px, env(safe-area-inset-bottom)));
+  max-height: 780px;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto auto auto auto;
   gap: 18px;
@@ -528,6 +530,7 @@ input[type="range"]::-moz-range-thumb {
 
 @media (max-width: 520px) {
   .app-shell {
+    align-items: stretch;
     padding: 0;
     background: #fff;
   }
@@ -537,6 +540,7 @@ input[type="range"]::-moz-range-thumb {
     height: 100vh;
     height: 100dvh;
     height: 100svh;
+    max-height: none;
     grid-template-rows: auto minmax(0, 1fr) auto auto auto auto;
     gap: 10px;
     border: 0;
