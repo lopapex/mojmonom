@@ -15,7 +15,6 @@ export default defineConfig({
         'icons/icon-512.png',
         'icons/icon-maskable-512.png',
         'visuals/needle.png',
-        'visuals/vibration.png',
         'visuals/wake-lock.png'
       ],
       manifest: {

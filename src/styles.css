@@ -424,7 +424,6 @@ input[type="range"]::-moz-range-thumb {
   content: none;
 }
 
-.vibration-icon,
 .wake-lock-icon {
   width: 24px;
   height: 24px;
@@ -432,7 +431,6 @@ input[type="range"]::-moz-range-thumb {
   filter: brightness(0) invert(1);
 }
 
-.header-icon-button.is-active .vibration-icon,
 .header-icon-button.is-active .wake-lock-icon {
   filter: none;
 }

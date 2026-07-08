@@ -21,13 +21,11 @@ type WakeLockNavigator = Navigator & {
 
 const MIN_BPM = 40;
 const MAX_BPM = 240;
-const VIBRATION_MS = 35;
 const STORAGE_KEY = 'mojmonom.settings';
 
 type SavedSettings = {
   bpm?: number;
   view?: ViewMode;
-  vibration?: boolean;
   keepAwake?: boolean;
 };
 
@@ -37,20 +35,15 @@ function loadSettings(): Required<SavedSettings> {
     return {
       bpm: clampBpm(parsed.bpm ?? 120),
       view: parsed.view === 'circle' ? 'circle' : 'needle',
-      vibration: Boolean(parsed.vibration),
       keepAwake: Boolean(parsed.keepAwake)
     };
   } catch {
-    return { bpm: 120, view: 'needle', vibration: false, keepAwake: false };
+    return { bpm: 120, view: 'needle', keepAwake: false };
   }
 }
 
 function clampBpm(value: number) {
   return Math.min(MAX_BPM, Math.max(MIN_BPM, Math.round(value)));
-}
-
-function supportsVibration() {
-  return typeof navigator !== 'undefined' && 'vibrate' in navigator;
 }
 
 function supportsWakeLock() {
@@ -76,27 +69,19 @@ export default function App() {
   const initialSettings = useMemo(loadSettings, []);
   const [bpm, setBpm] = useState(initialSettings.bpm);
   const [view, setView] = useState<ViewMode>(initialSettings.view);
-  const [vibration, setVibration] = useState(initialSettings.vibration);
   const [keepAwake, setKeepAwake] = useState(initialSettings.keepAwake);
   const [isRunning, setIsRunning] = useState(false);
   const [lastBeatAt, setLastBeatAt] = useState<number | null>(null);
   const [beatIndex, setBeatIndex] = useState(0);
   const [now, setNow] = useState(() => performance.now());
   const [isMobileDevice, setIsMobileDevice] = useState(isMobileLikeDevice);
-  const [vibrationAvailable, setVibrationAvailable] = useState(supportsVibration);
   const [wakeLockAvailable, setWakeLockAvailable] = useState(supportsWakeLock);
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isStandalone, setIsStandalone] = useState(isStandalonePwa);
-  const vibrationSupported = vibrationAvailable && isMobileDevice;
   const wakeLockSupported = wakeLockAvailable && isMobileDevice;
   const engineRef = useRef<MetronomeEngine | null>(null);
-  const vibrationRef = useRef(vibration);
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
   const keepAwakeRef = useRef(keepAwake);
-
-  useEffect(() => {
-    vibrationRef.current = vibration && vibrationSupported;
-  }, [vibration, vibrationSupported]);
 
   useEffect(() => {
     keepAwakeRef.current = keepAwake && wakeLockSupported;
@@ -182,14 +167,6 @@ export default function App() {
     const engine = new MetronomeEngine(bpm, ({ index }) => {
       setLastBeatAt(performance.now());
       setBeatIndex(index);
-      if (vibrationRef.current) {
-        const didVibrate = navigator.vibrate(VIBRATION_MS);
-        if (!didVibrate) {
-          vibrationRef.current = false;
-          setVibration(false);
-          setVibrationAvailable(false);
-        }
-      }
     });
     engineRef.current = engine;
 
@@ -204,8 +181,8 @@ export default function App() {
   }, [bpm]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ bpm, view, vibration, keepAwake }));
-  }, [bpm, view, vibration, keepAwake]);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ bpm, view, keepAwake }));
+  }, [bpm, view, keepAwake]);
 
   useEffect(() => {
     let frame = 0;
@@ -253,24 +230,6 @@ export default function App() {
     setBpm(clampBpm(value));
   }
 
-  function toggleVibration() {
-    if (!vibrationSupported) return;
-
-    const nextVibration = !vibration;
-    if (nextVibration) {
-      const didVibrate = navigator.vibrate(VIBRATION_MS);
-      if (!didVibrate) {
-        setVibration(false);
-        setVibrationAvailable(false);
-        return;
-      }
-    } else {
-      navigator.vibrate(0);
-    }
-
-    setVibration(nextVibration);
-  }
-
   async function toggleKeepAwake() {
     if (!wakeLockSupported) return;
 
@@ -301,18 +260,6 @@ export default function App() {
         <header className="app-header">
           <img className="brand-wordmark" src="/brand/mojmonom-wordmark-transparent.png" alt="mojmonom" />
           <div className="header-actions">
-            {vibrationSupported && (
-              <button
-                type="button"
-                className={vibration ? 'header-icon-button is-active' : 'header-icon-button'}
-                onClick={toggleVibration}
-                aria-pressed={vibration}
-                aria-label={vibration ? 'Vypnout vibrace' : 'Zapnout vibrace'}
-                title={vibration ? 'Vypnout vibrace' : 'Zapnout vibrace'}
-              >
-                <img className="vibration-icon" src="/visuals/vibration.png" alt="" draggable="false" />
-              </button>
-            )}
             {wakeLockSupported && (
               <button
                 type="button"
