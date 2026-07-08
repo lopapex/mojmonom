@@ -22,14 +22,16 @@
 html,
 body,
 #root {
-  min-height: 100%;
+  width: 100%;
+  height: 100%;
   margin: 0;
+  overflow: hidden;
 }
 
 body {
   min-width: 320px;
-  min-height: 100vh;
-  background: var(--canvas);
+  background: #252525;
+  overscroll-behavior: none;
 }
 
 button,
@@ -47,8 +49,8 @@ button:disabled {
 }
 
 .app-shell {
-  min-height: 100vh;
-  min-height: 100dvh;
+  height: 100vh;
+  height: 100dvh;
   display: flex;
   justify-content: center;
   padding:
@@ -56,13 +58,15 @@ button:disabled {
     max(9px, env(safe-area-inset-right))
     max(18px, env(safe-area-inset-bottom))
     max(9px, env(safe-area-inset-left));
+  overflow: hidden;
+  background: var(--canvas);
 }
 
 .metronome-panel {
   width: min(100%, 430px);
-  min-height: calc(100dvh - 27px);
+  height: calc(100dvh - max(9px, env(safe-area-inset-top)) - max(18px, env(safe-area-inset-bottom)));
   display: grid;
-  grid-template-rows: auto minmax(210px, 1fr) auto auto auto auto;
+  grid-template-rows: auto minmax(0, 1fr) auto auto auto auto;
   gap: 18px;
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -130,7 +134,7 @@ button:disabled {
 }
 
 .visual-stage {
-  height: clamp(250px, 38dvh, 318px);
+  height: min(100%, clamp(250px, 38dvh, 318px));
   display: grid;
   place-items: center;
   overflow: visible;
@@ -508,11 +512,10 @@ input[type="range"]::-moz-range-thumb {
 @media (max-height: 720px) {
   .metronome-panel {
     gap: 14px;
-    grid-template-rows: auto minmax(150px, 1fr) auto auto auto auto;
   }
 
   .visual-stage {
-    height: clamp(190px, 33dvh, 250px);
+    height: min(100%, clamp(190px, 33dvh, 250px));
   }
 
   .circle-view,
@@ -524,11 +527,12 @@ input[type="range"]::-moz-range-thumb {
 @media (max-width: 520px) {
   .app-shell {
     padding: 0;
+    background: #fff;
   }
 
   .metronome-panel {
     width: 100%;
-    min-height: 100dvh;
+    height: 100dvh;
     border: 0;
     border-radius: 0;
     box-shadow: none;
@@ -536,6 +540,8 @@ input[type="range"]::-moz-range-thumb {
 
   .app-header {
     border-radius: 0;
+    min-height: calc(64px + env(safe-area-inset-top));
+    padding-top: calc(10px + env(safe-area-inset-top));
   }
 }
 

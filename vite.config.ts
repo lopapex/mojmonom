@@ -25,8 +25,8 @@ export default defineConfig({
         scope: '/',
         display: 'standalone',
         orientation: 'portrait-primary',
-        background_color: '#f7f2e8',
-        theme_color: '#f7f2e8',
+        background_color: '#ffffff',
+        theme_color: '#252525',
         categories: ['music', 'utilities'],
         icons: [
           {
