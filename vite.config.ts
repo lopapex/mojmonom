@@ -50,7 +50,28 @@ export default defineConfig({
         ]
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,svg,png,ico,webmanifest}']
+        cleanupOutdatedCaches: true,
+        clientsClaim: true,
+        skipWaiting: true,
+        navigateFallback: '/index.html',
+        globPatterns: ['**/*.{js,css,html,svg,png,ico,webmanifest}'],
+        runtimeCaching: [
+          {
+            urlPattern: ({ request, url }) =>
+              request.method === 'GET' && url.origin === self.location.origin,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'mojmonom-offline-assets',
+              cacheableResponse: {
+                statuses: [0, 200]
+              },
+              expiration: {
+                maxEntries: 80,
+                maxAgeSeconds: 60 * 60 * 24 * 365
+              }
+            }
+          }
+        ]
       },
       devOptions: {
         enabled: true
