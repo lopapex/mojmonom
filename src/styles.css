@@ -151,18 +151,19 @@ button:disabled {
 }
 
 .visual-mode {
+  --visual-offset-y: 0px;
   animation: mode-flash 180ms ease-out both;
 }
 
 @keyframes mode-flash {
   from {
     opacity: 0.28;
-    transform: scale(0.985);
+    transform: translateY(var(--visual-offset-y)) scale(0.985);
   }
 
   to {
     opacity: 1;
-    transform: scale(1);
+    transform: translateY(var(--visual-offset-y)) scale(1);
   }
 }
 
@@ -556,6 +557,10 @@ input[type="range"]::-moz-range-thumb {
   .visual-stage {
     height: 100%;
     min-height: 0;
+  }
+
+  .visual-mode {
+    --visual-offset-y: clamp(14px, 3svh, 28px);
   }
 
   .circle-view,
