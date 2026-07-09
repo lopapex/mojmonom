@@ -227,8 +227,11 @@ export default function App() {
   const elapsed = hasBeat ? Math.max(0, now - lastBeatAt) : 0;
   const progress = hasBeat ? Math.min(1, elapsed / beatDurationMs) : 0;
   const pulse = hasBeat ? Math.max(0, 1 - progress) : 0;
-  const circleScale = 1 + Math.pow(pulse, 2.5) * 0.28;
-  const circleOpacity = 0.22 + pulse * 0.22;
+  const circleScale = 1 + Math.pow(pulse, 2.35) * 0.38;
+  const circleOpacity = 0.28 + pulse * 0.38;
+  const haloScale = 0.92 + Math.pow(pulse, 1.6) * 0.72;
+  const haloOpacity = pulse * 0.24;
+  const coreScale = 1 + Math.pow(pulse, 2.2) * 0.55;
   const needleSwingAngle = 22;
   const fromAngle = beatIndex % 2 === 0 ? -needleSwingAngle : needleSwingAngle;
   const toAngle = beatIndex % 2 === 0 ? needleSwingAngle : -needleSwingAngle;
@@ -318,13 +321,25 @@ export default function App() {
           {view === 'circle' ? (
             <div key="circle" className="circle-view visual-mode">
               <div
+                className="pulse-halo"
+                style={{
+                  transform: `scale(${isRunning ? haloScale : 0.92})`,
+                  opacity: isRunning ? haloOpacity : 0
+                }}
+              />
+              <div
                 className={isRunning ? 'pulse-ring is-active' : 'pulse-ring'}
                 style={{
                   transform: `scale(${isRunning ? circleScale : 1})`,
-                  opacity: isRunning ? circleOpacity : 0.18
+                  opacity: isRunning ? circleOpacity : 0.24
                 }}
               />
-              <div className="pulse-core" />
+              <div
+                className="pulse-core"
+                style={{
+                  transform: `scale(${isRunning ? coreScale : 1})`
+                }}
+              />
             </div>
           ) : (
             <div key="needle" className="needle-view visual-mode">
