@@ -1,4 +1,4 @@
-import { type TouchEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { MetronomeEngine } from './metronome/MetronomeEngine';
 
 type ViewMode = 'circle' | 'needle';
@@ -21,8 +21,6 @@ type WakeLockNavigator = Navigator & {
 
 const MIN_BPM = 40;
 const MAX_BPM = 240;
-const SWIPE_MIN_DISTANCE = 56;
-const SWIPE_AXIS_LOCK_RATIO = 1.25;
 const STORAGE_KEY = 'mojmonom.settings';
 
 type SavedSettings = {
@@ -84,7 +82,6 @@ export default function App() {
   const engineRef = useRef<MetronomeEngine | null>(null);
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
   const keepAwakeRef = useRef(keepAwake);
-  const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     keepAwakeRef.current = keepAwake && wakeLockSupported;
@@ -149,6 +146,7 @@ export default function App() {
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
+        if (keepAwakeRef.current) return;
         stopForBackground();
       }
     };
@@ -261,37 +259,6 @@ export default function App() {
     setBpm(clampBpm(value));
   }
 
-  function handleSwipeStart(event: TouchEvent<HTMLElement>) {
-    const target = event.target as HTMLElement;
-    const isControlTouch = target.closest(
-      'button, input, label, .tempo-control, .mode-control, .bottom-controls'
-    );
-    if (isControlTouch) {
-      swipeStartRef.current = null;
-      return;
-    }
-
-    const touch = event.touches[0];
-    swipeStartRef.current = { x: touch.clientX, y: touch.clientY };
-  }
-
-  function handleSwipeEnd(event: TouchEvent<HTMLElement>) {
-    const start = swipeStartRef.current;
-    swipeStartRef.current = null;
-    if (!start) return;
-
-    const touch = event.changedTouches[0];
-    const deltaX = touch.clientX - start.x;
-    const deltaY = touch.clientY - start.y;
-    const isHorizontalSwipe =
-      Math.abs(deltaX) >= SWIPE_MIN_DISTANCE &&
-      Math.abs(deltaX) > Math.abs(deltaY) * SWIPE_AXIS_LOCK_RATIO;
-
-    if (!isHorizontalSwipe) return;
-
-    setView(deltaX < 0 ? 'circle' : 'needle');
-  }
-
   async function toggleKeepAwake() {
     if (!wakeLockSupported) return;
 
@@ -321,8 +288,6 @@ export default function App() {
       <section
         className="metronome-panel"
         aria-label="mojmonom metronom"
-        onTouchStart={handleSwipeStart}
-        onTouchEnd={handleSwipeEnd}
       >
         <header className="app-header">
           <img className="brand-wordmark" src="/brand/mojmonom-wordmark-transparent.png" alt="mojmonom" />
