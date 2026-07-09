@@ -136,6 +136,30 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const stopForBackground = () => {
+      engineRef.current?.stop();
+      setIsRunning(false);
+      setLastBeatAt(null);
+      setBeatIndex(0);
+      void releaseWakeLock();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        stopForBackground();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('pagehide', stopForBackground);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('pagehide', stopForBackground);
+    };
+  }, []);
+
+  useEffect(() => {
     const media = window.matchMedia('(hover: none) and (pointer: coarse)');
     const updateMobileState = () => setIsMobileDevice(media.matches);
     updateMobileState();
