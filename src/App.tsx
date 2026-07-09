@@ -327,11 +327,13 @@ export default function App() {
             </div>
           ) : (
             <div key="needle" className="needle-view visual-mode">
-              <div
-                className="needle"
-                style={{ transform: `translateX(-50%) rotate(${isRunning ? needleAngle : 0}deg)` }}
-              />
-              <div className="needle-base" />
+              <div className="needle-symbol">
+                <div
+                  className="needle"
+                  style={{ transform: `translateX(-50%) rotate(${isRunning ? needleAngle : 0}deg)` }}
+                />
+                <div className="needle-base" />
+              </div>
             </div>
           )}
         </div>
