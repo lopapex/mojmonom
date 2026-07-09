@@ -153,7 +153,7 @@ button:disabled {
 }
 
 .circle-view {
-  --visual-offset-y: 0px;
+  --visual-offset-y: clamp(38px, 6dvh, 64px);
 }
 
 .needle-view {
@@ -590,6 +590,10 @@ input[type="range"]::-moz-range-thumb {
   .circle-view,
   .needle-view {
     width: min(58vw, 220px);
+  }
+
+  .circle-view {
+    --visual-offset-y: clamp(30px, 5svh, 52px);
   }
 
   .needle-view {

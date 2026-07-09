@@ -229,10 +229,11 @@ export default function App() {
   const pulse = hasBeat ? Math.max(0, 1 - progress) : 0;
   const circleScale = 1 + Math.pow(pulse, 2.5) * 0.28;
   const circleOpacity = 0.22 + pulse * 0.22;
-  const fromAngle = beatIndex % 2 === 0 ? -34 : 34;
-  const toAngle = beatIndex % 2 === 0 ? 34 : -34;
+  const needleSwingAngle = 22;
+  const fromAngle = beatIndex % 2 === 0 ? -needleSwingAngle : needleSwingAngle;
+  const toAngle = beatIndex % 2 === 0 ? needleSwingAngle : -needleSwingAngle;
   const easedProgress = 0.5 - Math.cos(progress * Math.PI) / 2;
-  const needleAngle = hasBeat ? fromAngle + (toAngle - fromAngle) * easedProgress : -34;
+  const needleAngle = hasBeat ? fromAngle + (toAngle - fromAngle) * easedProgress : -needleSwingAngle;
 
   async function toggleRunning() {
     const engine = engineRef.current;
