@@ -152,6 +152,12 @@ button:disabled {
   place-items: center;
 }
 
+.needle-view {
+  width: min(56vw, 250px);
+  height: min(100%, clamp(300px, 45dvh, 390px));
+  aspect-ratio: auto;
+}
+
 .visual-mode {
   --visual-offset-y: 0px;
   animation: mode-flash 180ms ease-out both;
@@ -192,10 +198,10 @@ button:disabled {
 
 .needle {
   position: absolute;
-  bottom: 8%;
+  bottom: 4%;
   left: 50%;
   width: 6px;
-  height: 86%;
+  height: 92%;
   border-radius: 4px;
   background: var(--ink);
   transform-origin: 50% 100%;
@@ -216,7 +222,7 @@ button:disabled {
 
 .needle-base {
   position: absolute;
-  bottom: 5%;
+  bottom: 1%;
   width: 51px;
   aspect-ratio: 1;
   border: 12px solid var(--ink);
@@ -526,6 +532,11 @@ input[type="range"]::-moz-range-thumb {
   .needle-view {
     width: min(62vw, 240px);
   }
+
+  .needle-view {
+    width: min(50vw, 190px);
+    height: min(100%, 300px);
+  }
 }
 
 @media (max-width: 520px) {
@@ -568,6 +579,11 @@ input[type="range"]::-moz-range-thumb {
   .circle-view,
   .needle-view {
     width: min(58vw, 220px);
+  }
+
+  .needle-view {
+    width: min(46vw, 180px);
+    height: min(100%, 330px);
   }
 
   .tempo-readout {
