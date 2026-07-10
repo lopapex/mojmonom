@@ -6,6 +6,7 @@ const LOOKAHEAD_MS = 25;
 const SCHEDULE_AHEAD_SECONDS = 0.1;
 const CLICK_DURATION_SECONDS = 0.035;
 const STOMP_DURATION_SECONDS = 0.13;
+const STOMP_SAMPLE_URL = '/audio/stomp.mp3';
 
 export class MetronomeEngine {
   private audioContext: AudioContext | null = null;
@@ -18,6 +19,8 @@ export class MetronomeEngine {
   private volume = 0.9;
   private soundMode: SoundMode = 'click';
   private soundGate: SoundGate = () => true;
+  private stompBuffer: AudioBuffer | null = null;
+  private stompBufferPromise: Promise<AudioBuffer | null> | null = null;
   private readonly onBeat: BeatHandler;
 
   constructor(bpm: number, onBeat: BeatHandler) {
@@ -35,6 +38,9 @@ export class MetronomeEngine {
 
   setSoundMode(soundMode: SoundMode) {
     this.soundMode = soundMode;
+    if (soundMode === 'stomp') {
+      void this.loadStompBuffer();
+    }
   }
 
   setSoundGate(soundGate: SoundGate) {
@@ -61,6 +67,12 @@ export class MetronomeEngine {
 
     if (this.audioContext.state === 'suspended') {
       await this.audioContext.resume();
+    }
+
+    if (this.soundMode === 'stomp') {
+      await this.loadStompBuffer();
+    } else {
+      void this.loadStompBuffer();
     }
 
     this.masterGain?.gain.setTargetAtTime(this.volume, this.audioContext.currentTime, 0.003);
@@ -139,6 +151,36 @@ export class MetronomeEngine {
   }
 
   private scheduleStomp(time: number) {
+    if (this.stompBuffer) {
+      this.scheduleSampleStomp(time);
+      return;
+    }
+
+    this.scheduleSyntheticStomp(time);
+  }
+
+  private scheduleSampleStomp(time: number) {
+    if (!this.audioContext || !this.masterGain || !this.stompBuffer) return;
+
+    const source = this.audioContext.createBufferSource();
+    const gain = this.audioContext.createGain();
+    const compressor = this.audioContext.createDynamicsCompressor();
+    source.buffer = this.stompBuffer;
+
+    gain.gain.setValueAtTime(1.35, time);
+    compressor.threshold.setValueAtTime(-14, time);
+    compressor.knee.setValueAtTime(16, time);
+    compressor.ratio.setValueAtTime(5, time);
+    compressor.attack.setValueAtTime(0.001, time);
+    compressor.release.setValueAtTime(0.06, time);
+
+    source.connect(gain);
+    gain.connect(compressor);
+    compressor.connect(this.masterGain);
+    source.start(time);
+  }
+
+  private scheduleSyntheticStomp(time: number) {
     if (!this.audioContext || !this.masterGain) return;
 
     const bodyOscillator = this.audioContext.createOscillator();
@@ -199,6 +241,28 @@ export class MetronomeEngine {
     bodyOscillator.stop(time + STOMP_DURATION_SECONDS + 0.02);
     thumpSource.start(time);
     thumpSource.stop(time + 0.03);
+  }
+
+  private loadStompBuffer() {
+    if (!this.audioContext) return Promise.resolve(null);
+    if (this.stompBuffer) return Promise.resolve(this.stompBuffer);
+    if (this.stompBufferPromise) return this.stompBufferPromise;
+
+    this.stompBufferPromise = fetch(STOMP_SAMPLE_URL)
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`Unable to load stomp sample: ${response.status}`);
+        }
+        return response.arrayBuffer();
+      })
+      .then((data) => this.audioContext?.decodeAudioData(data) ?? null)
+      .then((buffer) => {
+        this.stompBuffer = buffer;
+        return buffer;
+      })
+      .catch(() => null);
+
+    return this.stompBufferPromise;
   }
 
   private scheduleBeatEvent(audioTime: number, index: number) {
