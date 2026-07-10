@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { MetronomeEngine } from './metronome/MetronomeEngine';
+import { MetronomeEngine, type SoundMode } from './metronome/MetronomeEngine';
 
 type ViewMode = 'circle' | 'needle';
+type BeatSoundMode = 'both' | 'right';
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
@@ -21,12 +22,16 @@ type WakeLockNavigator = Navigator & {
 
 const MIN_BPM = 40;
 const MAX_BPM = 240;
+const MIN_VOLUME = 0;
+const MAX_VOLUME = 100;
 const STORAGE_KEY = 'mojmonom.settings';
 
 type SavedSettings = {
   bpm?: number;
   view?: ViewMode;
-  keepAwake?: boolean;
+  sound?: SoundMode;
+  beatSound?: BeatSoundMode;
+  volume?: number;
 };
 
 function loadSettings(): Required<SavedSettings> {
@@ -35,15 +40,21 @@ function loadSettings(): Required<SavedSettings> {
     return {
       bpm: clampBpm(parsed.bpm ?? 120),
       view: parsed.view === 'circle' ? 'circle' : 'needle',
-      keepAwake: Boolean(parsed.keepAwake)
+      sound: parsed.sound === 'stomp' ? 'stomp' : 'click',
+      beatSound: parsed.beatSound === 'right' ? 'right' : 'both',
+      volume: clampVolume(parsed.volume ?? 90)
     };
   } catch {
-    return { bpm: 120, view: 'needle', keepAwake: false };
+    return { bpm: 120, view: 'needle', sound: 'click', beatSound: 'both', volume: 90 };
   }
 }
 
 function clampBpm(value: number) {
   return Math.min(MAX_BPM, Math.max(MIN_BPM, Math.round(value)));
+}
+
+function clampVolume(value: number) {
+  return Math.min(MAX_VOLUME, Math.max(MIN_VOLUME, Math.round(value)));
 }
 
 function supportsWakeLock() {
@@ -69,23 +80,21 @@ export default function App() {
   const initialSettings = useMemo(loadSettings, []);
   const [bpm, setBpm] = useState(initialSettings.bpm);
   const [view, setView] = useState<ViewMode>(initialSettings.view);
-  const [keepAwake, setKeepAwake] = useState(initialSettings.keepAwake);
+  const [sound, setSound] = useState<SoundMode>(initialSettings.sound);
+  const [beatSound, setBeatSound] = useState<BeatSoundMode>(initialSettings.beatSound);
+  const [volume, setVolume] = useState(initialSettings.volume);
+  const [volumeOpen, setVolumeOpen] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [lastBeatAt, setLastBeatAt] = useState<number | null>(null);
   const [beatIndex, setBeatIndex] = useState(0);
   const [now, setNow] = useState(() => performance.now());
   const [isMobileDevice, setIsMobileDevice] = useState(isMobileLikeDevice);
-  const [wakeLockAvailable, setWakeLockAvailable] = useState(supportsWakeLock);
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isStandalone, setIsStandalone] = useState(isStandalonePwa);
-  const wakeLockSupported = wakeLockAvailable && isMobileDevice;
+  const wakeLockSupported = supportsWakeLock() && isMobileDevice;
   const engineRef = useRef<MetronomeEngine | null>(null);
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
-  const keepAwakeRef = useRef(keepAwake);
-
-  useEffect(() => {
-    keepAwakeRef.current = keepAwake && wakeLockSupported;
-  }, [keepAwake, wakeLockSupported]);
+  const keepAwakeRef = useRef(true);
 
   async function requestWakeLock() {
     if (!wakeLockSupported || wakeLockRef.current || document.visibilityState !== 'visible') return false;
@@ -101,8 +110,6 @@ export default function App() {
       return true;
     } catch {
       wakeLockRef.current = null;
-      setWakeLockAvailable(false);
-      setKeepAwake(false);
       return false;
     }
   }
@@ -114,12 +121,12 @@ export default function App() {
   }
 
   useEffect(() => {
-    if (keepAwake && wakeLockSupported) {
+    if (wakeLockSupported) {
       void requestWakeLock();
     } else {
       void releaseWakeLock();
     }
-  }, [keepAwake, wakeLockSupported]);
+  }, [wakeLockSupported]);
 
   useEffect(() => {
     const restoreWakeLock = () => {
@@ -206,8 +213,16 @@ export default function App() {
   }, [bpm]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ bpm, view, keepAwake }));
-  }, [bpm, view, keepAwake]);
+    engineRef.current?.setSoundMode(sound);
+  }, [sound]);
+
+  useEffect(() => {
+    engineRef.current?.setVolume(volume / 100);
+  }, [volume]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ bpm, view, sound, beatSound, volume }));
+  }, [bpm, view, sound, beatSound, volume]);
 
   useEffect(() => {
     let frame = 0;
@@ -233,11 +248,16 @@ export default function App() {
   const haloScale = 0.92 + Math.pow(pulse, 1.6) * 0.72;
   const haloOpacity = pulse * 0.24;
   const coreScale = 1 + Math.pow(pulse, 2.2) * 0.55;
-  const needleSwingAngle = 22;
+  const needleSwingAngle = 18;
   const fromAngle = beatIndex % 2 === 0 ? -needleSwingAngle : needleSwingAngle;
   const toAngle = beatIndex % 2 === 0 ? needleSwingAngle : -needleSwingAngle;
   const easedProgress = 0.5 - Math.cos(progress * Math.PI) / 2;
-  const needleAngle = hasBeat ? fromAngle + (toAngle - fromAngle) * easedProgress : -needleSwingAngle;
+  const needleAngle =
+    hasBeat && beatSound === 'right'
+      ? needleSwingAngle * Math.cos(progress * Math.PI * 2)
+      : hasBeat
+        ? fromAngle + (toAngle - fromAngle) * easedProgress
+        : -needleSwingAngle;
 
   async function toggleRunning() {
     const engine = engineRef.current;
@@ -250,6 +270,7 @@ export default function App() {
     }
 
     await engine.start();
+    void requestWakeLock();
     setLastBeatAt(null);
     setBeatIndex(0);
     setIsRunning(true);
@@ -259,20 +280,16 @@ export default function App() {
     setBpm(clampBpm(value));
   }
 
-  async function toggleKeepAwake() {
-    if (!wakeLockSupported) return;
+  function toggleSound() {
+    setSound((current) => (current === 'click' ? 'stomp' : 'click'));
+  }
 
-    if (keepAwake) {
-      setKeepAwake(false);
-      await releaseWakeLock();
-      return;
-    }
+  function toggleBeatSound() {
+    setBeatSound((current) => (current === 'both' ? 'right' : 'both'));
+  }
 
-    setKeepAwake(true);
-    const didLock = await requestWakeLock();
-    if (!didLock) {
-      setKeepAwake(false);
-    }
+  function updateVolume(value: number) {
+    setVolume(clampVolume(value));
   }
 
   async function installApp() {
@@ -292,18 +309,6 @@ export default function App() {
         <header className="app-header">
           <img className="brand-wordmark" src="/brand/mojmonom-wordmark-transparent.png" alt="mojmonom" />
           <div className="header-actions">
-            {wakeLockSupported && (
-              <button
-                type="button"
-                className={keepAwake ? 'header-icon-button is-active' : 'header-icon-button'}
-                onClick={toggleKeepAwake}
-                aria-pressed={keepAwake}
-                aria-label={keepAwake ? 'Povolit zamykani telefonu' : 'Nechat displej zapnuty'}
-                title={keepAwake ? 'Povolit zamykani telefonu' : 'Nechat displej zapnuty'}
-              >
-                <img className="wake-lock-icon" src="/visuals/wake-lock.png" alt="" draggable="false" />
-              </button>
-            )}
             {!isStandalone && installPrompt && (
               <button
                 type="button"
@@ -318,6 +323,56 @@ export default function App() {
                 </svg>
               </button>
             )}
+            {view === 'needle' && (
+              <button
+                type="button"
+                className="header-icon-button beat-sound-button"
+                onClick={toggleBeatSound}
+                aria-label={beatSound === 'both' ? 'Hrat zvuk jen vpravo' : 'Hrat zvuk na obou stranach'}
+                title={beatSound === 'both' ? 'Zvuk 2x' : 'Zvuk 1x'}
+              >
+                {beatSound === 'both' ? '2x' : '1x'}
+              </button>
+            )}
+            <button
+              type="button"
+              className="header-icon-button sound-button"
+              onClick={toggleSound}
+              aria-label={sound === 'click' ? 'Prepnout na zvuk dupnuti' : 'Prepnout na cisty metronom'}
+              title={sound === 'click' ? 'Cisty metronom' : 'Dupnuti'}
+            >
+              <img
+                className="sound-icon"
+                src={sound === 'click' ? '/visuals/sound-click-transparent.png' : '/visuals/sound-stomp-transparent.png'}
+                alt=""
+                draggable="false"
+              />
+            </button>
+            <div className="volume-control">
+              <button
+                type="button"
+                className={volumeOpen ? 'header-icon-button volume-button is-active' : 'header-icon-button volume-button'}
+                onClick={() => setVolumeOpen((current) => !current)}
+                aria-label={volumeOpen ? 'Zavrit hlasitost' : 'Otevrit hlasitost'}
+                aria-expanded={volumeOpen}
+              >
+                <img className="volume-icon" src="/visuals/volume-transparent.png" alt="" draggable="false" />
+              </button>
+              {volumeOpen && (
+                <div className="volume-popover">
+                  <input
+                    className="volume-slider"
+                    type="range"
+                    min={MIN_VOLUME}
+                    max={MAX_VOLUME}
+                    step="1"
+                    value={volume}
+                    onChange={(event) => updateVolume(Number(event.target.value))}
+                    aria-label="Hlasitost"
+                  />
+                </div>
+              )}
+            </div>
           </div>
         </header>
 
