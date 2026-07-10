@@ -144,6 +144,8 @@ export class MetronomeEngine {
     const bodyOscillator = this.audioContext.createOscillator();
     const bodyGain = this.audioContext.createGain();
     const bodyFilter = this.audioContext.createBiquadFilter();
+    const stompBus = this.audioContext.createGain();
+    const stompCompressor = this.audioContext.createDynamicsCompressor();
     const thumpBuffer = this.audioContext.createBuffer(1, Math.floor(this.audioContext.sampleRate * 0.025), this.audioContext.sampleRate);
     const thumpData = thumpBuffer.getChannelData(0);
     const thumpSource = this.audioContext.createBufferSource();
@@ -164,25 +166,34 @@ export class MetronomeEngine {
     bodyFilter.frequency.exponentialRampToValueAtTime(105, time + STOMP_DURATION_SECONDS);
     bodyFilter.Q.value = 0.95;
 
+    stompBus.gain.setValueAtTime(1.2, time);
+    stompCompressor.threshold.setValueAtTime(-18, time);
+    stompCompressor.knee.setValueAtTime(18, time);
+    stompCompressor.ratio.setValueAtTime(8, time);
+    stompCompressor.attack.setValueAtTime(0.001, time);
+    stompCompressor.release.setValueAtTime(0.055, time);
+
     bodyGain.gain.setValueAtTime(0.0001, time);
-    bodyGain.gain.exponentialRampToValueAtTime(1.45, time + 0.004);
-    bodyGain.gain.exponentialRampToValueAtTime(0.42, time + 0.032);
+    bodyGain.gain.exponentialRampToValueAtTime(2.35, time + 0.003);
+    bodyGain.gain.exponentialRampToValueAtTime(0.7, time + 0.035);
     bodyGain.gain.exponentialRampToValueAtTime(0.0001, time + STOMP_DURATION_SECONDS);
 
     thumpSource.buffer = thumpBuffer;
     thumpFilter.type = 'bandpass';
-    thumpFilter.frequency.setValueAtTime(1150, time);
-    thumpFilter.Q.value = 0.8;
+    thumpFilter.frequency.setValueAtTime(950, time);
+    thumpFilter.Q.value = 0.95;
     thumpGain.gain.setValueAtTime(0.0001, time);
-    thumpGain.gain.exponentialRampToValueAtTime(0.55, time + 0.002);
-    thumpGain.gain.exponentialRampToValueAtTime(0.0001, time + 0.025);
+    thumpGain.gain.exponentialRampToValueAtTime(1.15, time + 0.0015);
+    thumpGain.gain.exponentialRampToValueAtTime(0.0001, time + 0.03);
 
     bodyOscillator.connect(bodyFilter);
     bodyFilter.connect(bodyGain);
-    bodyGain.connect(this.masterGain);
+    bodyGain.connect(stompBus);
     thumpSource.connect(thumpFilter);
     thumpFilter.connect(thumpGain);
-    thumpGain.connect(this.masterGain);
+    thumpGain.connect(stompBus);
+    stompBus.connect(stompCompressor);
+    stompCompressor.connect(this.masterGain);
 
     bodyOscillator.start(time);
     bodyOscillator.stop(time + STOMP_DURATION_SECONDS + 0.02);
