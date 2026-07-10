@@ -1,10 +1,11 @@
 export type BeatHandler = (beat: { index: number; audioTime: number }) => void;
+export type SoundGate = (beatIndex: number) => boolean;
 export type SoundMode = 'click' | 'stomp';
 
 const LOOKAHEAD_MS = 25;
 const SCHEDULE_AHEAD_SECONDS = 0.1;
 const CLICK_DURATION_SECONDS = 0.035;
-const STOMP_DURATION_SECONDS = 0.085;
+const STOMP_DURATION_SECONDS = 0.13;
 
 export class MetronomeEngine {
   private audioContext: AudioContext | null = null;
@@ -16,6 +17,7 @@ export class MetronomeEngine {
   private bpmValue: number;
   private volume = 0.9;
   private soundMode: SoundMode = 'click';
+  private soundGate: SoundGate = () => true;
   private readonly onBeat: BeatHandler;
 
   constructor(bpm: number, onBeat: BeatHandler) {
@@ -33,6 +35,10 @@ export class MetronomeEngine {
 
   setSoundMode(soundMode: SoundMode) {
     this.soundMode = soundMode;
+  }
+
+  setSoundGate(soundGate: SoundGate) {
+    this.soundGate = soundGate;
   }
 
   setVolume(volume: number) {
@@ -94,7 +100,9 @@ export class MetronomeEngine {
     while (this.nextBeatTime < this.audioContext.currentTime + SCHEDULE_AHEAD_SECONDS) {
       const beatTime = this.nextBeatTime;
       const index = this.beatIndex;
-      this.scheduleSound(beatTime);
+      if (this.soundGate(index)) {
+        this.scheduleSound(beatTime);
+      }
       this.scheduleBeatEvent(beatTime, index);
 
       this.beatIndex += 1;
@@ -133,28 +141,53 @@ export class MetronomeEngine {
   private scheduleStomp(time: number) {
     if (!this.audioContext || !this.masterGain) return;
 
-    const oscillator = this.audioContext.createOscillator();
-    const gain = this.audioContext.createGain();
-    const filter = this.audioContext.createBiquadFilter();
+    const bodyOscillator = this.audioContext.createOscillator();
+    const bodyGain = this.audioContext.createGain();
+    const bodyFilter = this.audioContext.createBiquadFilter();
+    const thumpBuffer = this.audioContext.createBuffer(1, Math.floor(this.audioContext.sampleRate * 0.025), this.audioContext.sampleRate);
+    const thumpData = thumpBuffer.getChannelData(0);
+    const thumpSource = this.audioContext.createBufferSource();
+    const thumpGain = this.audioContext.createGain();
+    const thumpFilter = this.audioContext.createBiquadFilter();
 
-    oscillator.type = 'triangle';
-    oscillator.frequency.setValueAtTime(115, time);
-    oscillator.frequency.exponentialRampToValueAtTime(48, time + STOMP_DURATION_SECONDS);
+    for (let index = 0; index < thumpData.length; index += 1) {
+      const fade = 1 - index / thumpData.length;
+      thumpData[index] = (Math.random() * 2 - 1) * fade;
+    }
 
-    filter.type = 'lowpass';
-    filter.frequency.setValueAtTime(380, time);
-    filter.frequency.exponentialRampToValueAtTime(130, time + STOMP_DURATION_SECONDS);
-    filter.Q.value = 0.7;
+    bodyOscillator.type = 'triangle';
+    bodyOscillator.frequency.setValueAtTime(145, time);
+    bodyOscillator.frequency.exponentialRampToValueAtTime(42, time + STOMP_DURATION_SECONDS);
 
-    gain.gain.setValueAtTime(0.0001, time);
-    gain.gain.exponentialRampToValueAtTime(0.95, time + 0.006);
-    gain.gain.exponentialRampToValueAtTime(0.0001, time + STOMP_DURATION_SECONDS);
+    bodyFilter.type = 'lowpass';
+    bodyFilter.frequency.setValueAtTime(520, time);
+    bodyFilter.frequency.exponentialRampToValueAtTime(105, time + STOMP_DURATION_SECONDS);
+    bodyFilter.Q.value = 0.95;
 
-    oscillator.connect(filter);
-    filter.connect(gain);
-    gain.connect(this.masterGain);
-    oscillator.start(time);
-    oscillator.stop(time + STOMP_DURATION_SECONDS + 0.02);
+    bodyGain.gain.setValueAtTime(0.0001, time);
+    bodyGain.gain.exponentialRampToValueAtTime(1.45, time + 0.004);
+    bodyGain.gain.exponentialRampToValueAtTime(0.42, time + 0.032);
+    bodyGain.gain.exponentialRampToValueAtTime(0.0001, time + STOMP_DURATION_SECONDS);
+
+    thumpSource.buffer = thumpBuffer;
+    thumpFilter.type = 'bandpass';
+    thumpFilter.frequency.setValueAtTime(1150, time);
+    thumpFilter.Q.value = 0.8;
+    thumpGain.gain.setValueAtTime(0.0001, time);
+    thumpGain.gain.exponentialRampToValueAtTime(0.55, time + 0.002);
+    thumpGain.gain.exponentialRampToValueAtTime(0.0001, time + 0.025);
+
+    bodyOscillator.connect(bodyFilter);
+    bodyFilter.connect(bodyGain);
+    bodyGain.connect(this.masterGain);
+    thumpSource.connect(thumpFilter);
+    thumpFilter.connect(thumpGain);
+    thumpGain.connect(this.masterGain);
+
+    bodyOscillator.start(time);
+    bodyOscillator.stop(time + STOMP_DURATION_SECONDS + 0.02);
+    thumpSource.start(time);
+    thumpSource.stop(time + 0.03);
   }
 
   private scheduleBeatEvent(audioTime: number, index: number) {

@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { MetronomeEngine, type SoundMode } from './metronome/MetronomeEngine';
 
 type ViewMode = 'circle' | 'needle';
-type BeatSoundMode = 'both' | 'right';
+type BeatSoundMode = '1x' | '2x' | '4x';
+type StoredBeatSoundMode = BeatSoundMode | 'both' | 'right';
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
@@ -34,18 +35,28 @@ type SavedSettings = {
   volume?: number;
 };
 
+type StoredSettings = Omit<SavedSettings, 'beatSound'> & {
+  beatSound?: StoredBeatSoundMode;
+};
+
+function parseBeatSoundMode(value: StoredSettings['beatSound']): BeatSoundMode {
+  if (value === '2x' || value === 'right') return '2x';
+  if (value === '4x') return '4x';
+  return '1x';
+}
+
 function loadSettings(): Required<SavedSettings> {
   try {
-    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}') as SavedSettings;
+    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}') as StoredSettings;
     return {
       bpm: clampBpm(parsed.bpm ?? 120),
       view: parsed.view === 'circle' ? 'circle' : 'needle',
       sound: parsed.sound === 'stomp' ? 'stomp' : 'click',
-      beatSound: parsed.beatSound === 'right' ? 'right' : 'both',
+      beatSound: parseBeatSoundMode(parsed.beatSound),
       volume: clampVolume(parsed.volume ?? 90)
     };
   } catch {
-    return { bpm: 120, view: 'needle', sound: 'click', beatSound: 'both', volume: 90 };
+    return { bpm: 120, view: 'needle', sound: 'click', beatSound: '1x', volume: 90 };
   }
 }
 
@@ -217,6 +228,14 @@ export default function App() {
   }, [sound]);
 
   useEffect(() => {
+    engineRef.current?.setSoundGate((index) => {
+      if (view !== 'needle' || beatSound === '1x') return true;
+      if (beatSound === '2x') return index % 2 === 1;
+      return index % 4 === 3;
+    });
+  }, [beatSound, view]);
+
+  useEffect(() => {
     engineRef.current?.setVolume(volume / 100);
   }, [volume]);
 
@@ -252,12 +271,7 @@ export default function App() {
   const fromAngle = beatIndex % 2 === 0 ? -needleSwingAngle : needleSwingAngle;
   const toAngle = beatIndex % 2 === 0 ? needleSwingAngle : -needleSwingAngle;
   const easedProgress = 0.5 - Math.cos(progress * Math.PI) / 2;
-  const needleAngle =
-    hasBeat && beatSound === 'right'
-      ? needleSwingAngle * Math.cos(progress * Math.PI * 2)
-      : hasBeat
-        ? fromAngle + (toAngle - fromAngle) * easedProgress
-        : -needleSwingAngle;
+  const needleAngle = hasBeat ? fromAngle + (toAngle - fromAngle) * easedProgress : -needleSwingAngle;
 
   async function toggleRunning() {
     const engine = engineRef.current;
@@ -285,7 +299,11 @@ export default function App() {
   }
 
   function toggleBeatSound() {
-    setBeatSound((current) => (current === 'both' ? 'right' : 'both'));
+    setBeatSound((current) => {
+      if (current === '1x') return '2x';
+      if (current === '2x') return '4x';
+      return '1x';
+    });
   }
 
   function updateVolume(value: number) {
@@ -328,10 +346,10 @@ export default function App() {
                 type="button"
                 className="header-icon-button beat-sound-button"
                 onClick={toggleBeatSound}
-                aria-label={beatSound === 'both' ? 'Hrat zvuk jen vpravo' : 'Hrat zvuk na obou stranach'}
-                title={beatSound === 'both' ? 'Zvuk 2x' : 'Zvuk 1x'}
+                aria-label={`Prepnout rytmus zvuku kyvadla, aktualne ${beatSound}`}
+                title={`Zvuk ${beatSound}`}
               >
-                {beatSound === 'both' ? '2x' : '1x'}
+                {beatSound}
               </button>
             )}
             <button
