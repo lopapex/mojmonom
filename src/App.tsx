@@ -68,6 +68,12 @@ function clampVolume(value: number) {
   return Math.min(MAX_VOLUME, Math.max(MIN_VOLUME, Math.round(value)));
 }
 
+function isSoundBeat(index: number, beatSound: BeatSoundMode) {
+  if (beatSound === '1x') return true;
+  if (beatSound === '2x') return index % 2 === 1;
+  return index % 4 === 3;
+}
+
 function supportsWakeLock() {
   return typeof navigator !== 'undefined' && 'wakeLock' in navigator;
 }
@@ -229,11 +235,9 @@ export default function App() {
 
   useEffect(() => {
     engineRef.current?.setSoundGate((index) => {
-      if (view !== 'needle' || beatSound === '1x') return true;
-      if (beatSound === '2x') return index % 2 === 1;
-      return index % 4 === 3;
+      return isSoundBeat(index, beatSound);
     });
-  }, [beatSound, view]);
+  }, [beatSound]);
 
   useEffect(() => {
     engineRef.current?.setVolume(volume / 100);
@@ -262,11 +266,13 @@ export default function App() {
   const elapsed = hasBeat ? Math.max(0, now - lastBeatAt) : 0;
   const progress = hasBeat ? Math.min(1, elapsed / beatDurationMs) : 0;
   const pulse = hasBeat ? Math.max(0, 1 - progress) : 0;
-  const circleScale = 1 + Math.pow(pulse, 2.35) * 0.38;
-  const circleOpacity = 0.28 + pulse * 0.38;
-  const haloScale = 0.92 + Math.pow(pulse, 1.6) * 0.72;
-  const haloOpacity = pulse * 0.24;
-  const coreScale = 1 + Math.pow(pulse, 2.2) * 0.55;
+  const soundBeat = hasBeat ? isSoundBeat(beatIndex, beatSound) : true;
+  const pulseWeight = soundBeat ? 1 : 0.42;
+  const circleScale = 1 + Math.pow(pulse, 2.35) * 0.38 * pulseWeight;
+  const circleOpacity = 0.28 + pulse * 0.38 * pulseWeight;
+  const haloScale = 0.92 + Math.pow(pulse, 1.6) * 0.72 * pulseWeight;
+  const haloOpacity = pulse * 0.24 * pulseWeight;
+  const coreScale = 1 + Math.pow(pulse, 2.2) * 0.55 * pulseWeight;
   const needleSwingAngle = 18;
   const fromAngle = beatIndex % 2 === 0 ? -needleSwingAngle : needleSwingAngle;
   const toAngle = beatIndex % 2 === 0 ? needleSwingAngle : -needleSwingAngle;
@@ -341,17 +347,15 @@ export default function App() {
                 </svg>
               </button>
             )}
-            {view === 'needle' && (
-              <button
-                type="button"
-                className="header-icon-button beat-sound-button"
-                onClick={toggleBeatSound}
-                aria-label={`Prepnout rytmus zvuku kyvadla, aktualne ${beatSound}`}
-                title={`Zvuk ${beatSound}`}
-              >
-                {beatSound}
-              </button>
-            )}
+            <button
+              type="button"
+              className="header-icon-button beat-sound-button"
+              onClick={toggleBeatSound}
+              aria-label={`Prepnout cetnost zvuku, aktualne ${beatSound}`}
+              title={`Zvuk ${beatSound}`}
+            >
+              {beatSound}
+            </button>
             <button
               type="button"
               className="header-icon-button sound-button"
