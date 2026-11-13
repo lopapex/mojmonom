@@ -179,7 +179,7 @@ export default function App() {
               onClick={() => setSound(sound === 'click' ? 'stomp' : 'click')}
               aria-label={sound === 'click' ? 'Přepnout na zvuk dupnutí' : 'Přepnout na čistý metronom'}
             >
-              {sound === 'click' ? <ClickIcon /> : <StompIcon />}
+              {sound === 'click' ? <ClickIcon key="click" /> : <StompIcon key="stomp" />}
             </button>
             <div className="volume-control" ref={volumeRef}>
               <button
