@@ -1,7 +1,19 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { MetronomeEngine, type SoundMode } from './metronome/MetronomeEngine';
 import { Visual, type ViewMode } from './Visual';
-import { ClickIcon, InstallIcon, StompIcon, VolumeIcon } from './icons';
+import {
+  ClickIcon,
+  InstallIcon,
+  MinusIcon,
+  NeedleIcon,
+  PauseIcon,
+  PlayIcon,
+  PlusIcon,
+  PulseIcon,
+  StompIcon,
+  VolumeIcon
+} from './icons';
+import { useHoldRepeat, useTapTempo } from './controls';
 
 type BeatSoundMode = '1x' | '2x' | '4x';
 
@@ -51,6 +63,7 @@ export default function App() {
   const runningRef = useRef(false);
   const wakeLock = useRef<WakeLockSentinel | null>(null);
   const volumeRef = useRef<HTMLDivElement>(null);
+  const tempoRef = useRef<HTMLSpanElement>(null);
 
   useEffect(() => engine.setBpm(bpm), [bpm]);
   useEffect(() => engine.setSoundMode(sound), [sound]);
@@ -153,12 +166,41 @@ export default function App() {
   }
 
   const updateBpm = (value: number) => setBpm(clamp(value, MIN_BPM, MAX_BPM));
+  const stepBpm = (delta: number) => setBpm((current) => clamp(current + delta, MIN_BPM, MAX_BPM));
+  const decrease = useHoldRepeat(() => stepBpm(-1));
+  const increase = useHoldRepeat(() => stepBpm(1));
+  const tapTempo = useTapTempo(updateBpm);
+
+  function onTap() {
+    tapTempo();
+    tempoRef.current?.animate(
+      [{ transform: 'scale(0.94)', opacity: 0.6 }, { transform: 'none', opacity: 1 }],
+      { duration: 220, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)' }
+    );
+  }
+
+  // Desktop shortcuts: Space = play/pause, arrows = ±1 BPM (Shift = ±10).
+  const shortcuts = useRef({ toggleRunning, stepBpm });
+  shortcuts.current = { toggleRunning, stepBpm };
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.target instanceof HTMLInputElement || event.metaKey || event.ctrlKey || event.altKey) return;
+      const step = event.shiftKey ? 10 : 1;
+      if (event.code === 'Space') shortcuts.current.toggleRunning();
+      else if (event.key === 'ArrowUp' || event.key === 'ArrowRight') shortcuts.current.stepBpm(step);
+      else if (event.key === 'ArrowDown' || event.key === 'ArrowLeft') shortcuts.current.stepBpm(-step);
+      else return;
+      event.preventDefault();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   return (
     <main className="app-shell">
       <section className="metronome-panel" aria-label="mojmonom metronom">
         <header className="app-header">
-          <img className="brand-wordmark" src="/brand/mojmonom-wordmark-white.png" alt="mojmonom" width="180" height="40" />
+          <img className="brand-wordmark" src="/brand/mojmonom-wordmark.png" alt="mojmonom" width="180" height="40" />
           <div className="header-actions">
             {installPrompt && (
               <button type="button" className="header-button" onClick={installApp} aria-label="Instalovat mojmonom">
@@ -177,7 +219,7 @@ export default function App() {
               type="button"
               className="header-button"
               onClick={() => setSound(sound === 'click' ? 'stomp' : 'click')}
-              aria-label={sound === 'click' ? 'Přepnout na zvuk dupnutí' : 'Přepnout na čistý metronom'}
+              aria-label={sound === 'click' ? 'Přepnout na kopák' : 'Přepnout na čistý metronom'}
             >
               {sound === 'click' ? <ClickIcon key="click" /> : <StompIcon key="stomp" />}
             </button>
@@ -208,14 +250,22 @@ export default function App() {
 
         <Visual engine={engine} view={view} running={running} bpm={bpm} />
 
-        <div className="tempo-readout">
+        <button
+          type="button"
+          className="tempo-readout"
+          onPointerDown={(event) => event.button === 0 && onTap()}
+          onClick={(event) => event.detail === 0 && onTap()}
+          aria-label={`Tempo ${bpm} BPM, ťukni do rytmu pro nastavení`}
+        >
           <span className="tempo-unit">BPM</span>
-          <span className="tempo-number">{bpm}</span>
-        </div>
+          <span className="tempo-number" ref={tempoRef}>
+            {bpm}
+          </span>
+        </button>
 
         <div className="tempo-control">
-          <button type="button" onClick={() => updateBpm(bpm - 1)} aria-label="Snížit tempo o 1 BPM">
-            −
+          <button type="button" {...decrease} aria-label="Snížit tempo o 1 BPM">
+            <MinusIcon />
           </button>
           <div className="slider-wrap">
             <input
@@ -231,12 +281,13 @@ export default function App() {
               <span>{MAX_BPM}</span>
             </span>
           </div>
-          <button type="button" onClick={() => updateBpm(bpm + 1)} aria-label="Zvýšit tempo o 1 BPM">
-            +
+          <button type="button" {...increase} aria-label="Zvýšit tempo o 1 BPM">
+            <PlusIcon />
           </button>
         </div>
 
-        <div className="mode-control" role="group" aria-label="Pohled metronomu">
+        <div className={`mode-control is-${view}`} role="group" aria-label="Pohled metronomu">
+          <span className="mode-thumb" aria-hidden="true" />
           <button
             type="button"
             className={view === 'needle' ? 'is-selected' : ''}
@@ -244,7 +295,7 @@ export default function App() {
             aria-label="Pohled ručička"
             aria-pressed={view === 'needle'}
           >
-            <span className="mode-icon needle-mode-icon" aria-hidden="true" />
+            <NeedleIcon />
           </button>
           <button
             type="button"
@@ -253,7 +304,7 @@ export default function App() {
             aria-label="Pohled kolečko"
             aria-pressed={view === 'circle'}
           >
-            <span className="mode-icon circle-mode-icon" aria-hidden="true" />
+            <PulseIcon />
           </button>
         </div>
 
@@ -263,7 +314,7 @@ export default function App() {
           onClick={toggleRunning}
           aria-label={running ? 'Pozastavit metronom' : 'Spustit metronom'}
         >
-          <span className={running ? 'transport-icon pause-icon' : 'transport-icon play-icon'} />
+          {running ? <PauseIcon key="pause" /> : <PlayIcon key="play" />}
         </button>
       </section>
     </main>

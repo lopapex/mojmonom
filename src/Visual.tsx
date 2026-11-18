@@ -4,6 +4,8 @@ import type { MetronomeEngine } from './metronome/MetronomeEngine';
 export type ViewMode = 'circle' | 'needle';
 
 const SWING = 18;
+const MIN_BPM = 40;
+const MAX_BPM = 240;
 
 type Props = {
   engine: MetronomeEngine;
@@ -27,6 +29,7 @@ export function Visual({ engine, view, running, bpm }: Props) {
   const halo = useRef<HTMLDivElement>(null);
   const ring = useRef<HTMLDivElement>(null);
   const core = useRef<HTMLDivElement>(null);
+  const tip = useRef<HTMLDivElement>(null);
   const bpmRef = useRef(bpm);
   bpmRef.current = bpm;
 
@@ -40,6 +43,12 @@ export function Visual({ engine, view, running, bpm }: Props) {
       if (!state) return;
       const { now, startTime, prev, next } = state;
 
+      let pulse = 0;
+      if (prev) {
+        const nextTime = next?.time ?? prev.time + 60 / bpmRef.current;
+        pulse = (1 - clamp01((now - prev.time) / (nextTime - prev.time))) * (prev.audible ? 1 : 0.42);
+      }
+
       if (needle.current) {
         let angle = 0;
         if (!prev && next) {
@@ -51,14 +60,10 @@ export function Visual({ engine, view, running, bpm }: Props) {
           angle = from + (angleAt(prev.index + 1) - from) * p;
         }
         needle.current.style.transform = `rotate(${angle.toFixed(2)}deg)`;
+        tip.current?.style.setProperty('transform', `scale(${(1 + Math.pow(pulse, 3) * 0.45).toFixed(4)})`);
       }
 
       if (ring.current && halo.current && core.current) {
-        let pulse = 0;
-        if (prev) {
-          const nextTime = next?.time ?? prev.time + 60 / bpmRef.current;
-          pulse = (1 - clamp01((now - prev.time) / (nextTime - prev.time))) * (prev.audible ? 1 : 0.42);
-        }
         halo.current.style.transform = `scale(${(0.92 + Math.pow(pulse, 1.6) * 0.72).toFixed(4)})`;
         halo.current.style.opacity = (pulse * 0.24).toFixed(3);
         ring.current.style.transform = `scale(${(1 + Math.pow(pulse, 2.35) * 0.38).toFixed(4)})`;
@@ -71,7 +76,7 @@ export function Visual({ engine, view, running, bpm }: Props) {
     return () => {
       cancelAnimationFrame(frame);
       // drop inline styles; the CSS rest state + transition eases everything back
-      for (const el of [needle.current, halo.current, ring.current, core.current]) {
+      for (const el of [needle.current, tip.current, halo.current, ring.current, core.current]) {
         el?.style.removeProperty('transform');
         el?.style.removeProperty('opacity');
       }
@@ -87,8 +92,16 @@ export function Visual({ engine, view, running, bpm }: Props) {
           <div ref={core} className="pulse-core" />
         </div>
       ) : (
-        <div key="needle" className="needle-view visual-mode">
-          <div ref={needle} className="needle" />
+        <div
+          key="needle"
+          className="needle-view visual-mode"
+          style={{ '--weight': ((bpm - MIN_BPM) / (MAX_BPM - MIN_BPM)).toFixed(3) }}
+        >
+          <div className="needle-arc" />
+          <div ref={needle} className="needle">
+            <div ref={tip} className="needle-tip" />
+            <div className="needle-weight" />
+          </div>
           <div className="needle-base" />
         </div>
       )}

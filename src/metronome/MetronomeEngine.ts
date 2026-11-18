@@ -18,15 +18,13 @@ const LOOKAHEAD_MS = 25;
 const SCHEDULE_AHEAD_SECONDS = 0.1;
 const LEAD_IN_SECONDS = 0.1;
 const CLICK_DURATION_SECONDS = 0.035;
-const STOMP_DURATION_SECONDS = 0.13;
-const STOMP_SAMPLE_URL = '/audio/stomp.mp3';
+const KICK_DURATION_SECONDS = 0.45;
 
 export class MetronomeEngine {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
   /** Per-run bus; dropping it on stop silences sounds already scheduled ahead. */
   private runBus: GainNode | null = null;
-  private stompBus: GainNode | null = null;
   private timerId: number | null = null;
   private runId = 0;
   private nextBeatTime = 0;
@@ -37,15 +35,10 @@ export class MetronomeEngine {
   private volume = 0.9;
   private soundMode: SoundMode = 'click';
   private soundGate: SoundGate = () => true;
-  private stompBuffer: AudioBuffer | null = null;
-  private stompData: Promise<ArrayBuffer | null>;
-  private noiseBuffer: AudioBuffer | null = null;
+  private kickBuffer: AudioBuffer | null = null;
 
   constructor(bpm: number) {
     this.bpmValue = bpm;
-    this.stompData = fetch(STOMP_SAMPLE_URL)
-      .then((response) => (response.ok ? response.arrayBuffer() : null))
-      .catch(() => null);
   }
 
   get isRunning() {
@@ -77,24 +70,13 @@ export class MetronomeEngine {
 
     const ctx = this.ensureContext();
     if (ctx.state !== 'running') await ctx.resume();
-    if (this.soundMode === 'stomp') await this.decodeStomp();
-    else void this.decodeStomp();
 
     // stop() (or another start()) happened while awaiting
     if (runId !== this.runId || this.isRunning) return;
 
     this.runBus = ctx.createGain();
     this.runBus.connect(this.masterGain!);
-    this.stompBus = ctx.createGain();
-    this.stompBus.gain.value = 1.35;
-    const compressor = ctx.createDynamicsCompressor();
-    compressor.threshold.value = -14;
-    compressor.knee.value = 16;
-    compressor.ratio.value = 5;
-    compressor.attack.value = 0.001;
-    compressor.release.value = 0.06;
-    this.stompBus.connect(compressor);
-    compressor.connect(this.runBus);
+    this.getKickBuffer(ctx);
 
     this.startTime = ctx.currentTime;
     this.nextBeatTime = this.startTime + LEAD_IN_SECONDS;
@@ -117,7 +99,6 @@ export class MetronomeEngine {
       window.setTimeout(() => bus.disconnect(), 100);
     }
     this.runBus = null;
-    this.stompBus = null;
     this.beats = [];
   }
 
@@ -154,6 +135,10 @@ export class MetronomeEngine {
 
   private ensureContext() {
     if (!this.ctx) {
+      // iOS: play through the silent switch like a media app (Safari 16.4+)
+      const session = (navigator as Navigator & { audioSession?: { type: string } }).audioSession;
+      if (session) session.type = 'playback';
+
       const AudioContextClass = window.AudioContext || window.webkitAudioContext;
       this.ctx = new AudioContextClass({ latencyHint: 'interactive' });
       this.masterGain = this.ctx.createGain();
@@ -161,17 +146,6 @@ export class MetronomeEngine {
       this.masterGain.connect(this.ctx.destination);
     }
     return this.ctx;
-  }
-
-  private async decodeStomp() {
-    const data = await this.stompData;
-    if (!data || !this.ctx || this.stompBuffer) return;
-    try {
-      // decodeAudioData detaches the buffer, so hand it a copy
-      this.stompBuffer = await this.ctx.decodeAudioData(data.slice(0));
-    } catch {
-      this.stompBuffer = null;
-    }
   }
 
   private schedule() {
@@ -194,8 +168,7 @@ export class MetronomeEngine {
 
   private scheduleSound(time: number) {
     if (this.soundMode === 'click') this.scheduleClick(time);
-    else if (this.stompBuffer) this.scheduleSampleStomp(time);
-    else this.scheduleSyntheticStomp(time);
+    else this.scheduleKick(time);
   }
 
   private scheduleClick(time: number) {
@@ -216,67 +189,54 @@ export class MetronomeEngine {
     oscillator.stop(time + CLICK_DURATION_SECONDS + 0.01);
   }
 
-  private scheduleSampleStomp(time: number) {
+  private scheduleKick(time: number) {
     const source = this.ctx!.createBufferSource();
-    source.buffer = this.stompBuffer;
-    source.connect(this.stompBus!);
+    source.buffer = this.getKickBuffer(this.ctx!);
+    source.connect(this.runBus!);
     source.start(time);
   }
 
-  private scheduleSyntheticStomp(time: number) {
-    const ctx = this.ctx!;
-    const body = ctx.createOscillator();
-    const bodyFilter = ctx.createBiquadFilter();
-    const bodyGain = ctx.createGain();
-    const thump = ctx.createBufferSource();
-    const thumpFilter = ctx.createBiquadFilter();
-    const thumpGain = ctx.createGain();
+  /**
+   * Kick drum rendered once: a sine whose pitch drops fast from ~170 Hz to
+   * ~48 Hz (the drum head), a short beater click on top and gentle saturation.
+   */
+  private getKickBuffer(ctx: AudioContext) {
+    if (this.kickBuffer) return this.kickBuffer;
 
-    body.type = 'triangle';
-    body.frequency.setValueAtTime(145, time);
-    body.frequency.exponentialRampToValueAtTime(42, time + STOMP_DURATION_SECONDS);
+    const rate = ctx.sampleRate;
+    const length = Math.floor(rate * KICK_DURATION_SECONDS);
+    const buffer = ctx.createBuffer(1, length, rate);
+    const data = buffer.getChannelData(0);
+    const drive = 1.8;
+    let phase = 0;
+    let lastNoise = 0;
+    let peak = 0;
 
-    bodyFilter.type = 'lowpass';
-    bodyFilter.frequency.setValueAtTime(520, time);
-    bodyFilter.frequency.exponentialRampToValueAtTime(105, time + STOMP_DURATION_SECONDS);
-    bodyFilter.Q.value = 0.95;
+    for (let i = 0; i < length; i += 1) {
+      const t = i / rate;
+      const frequency = 48 + 122 * Math.exp(-t / 0.032);
+      phase += (2 * Math.PI * frequency) / rate;
+      const body = Math.sin(phase) * Math.exp(-t / 0.17);
 
-    bodyGain.gain.setValueAtTime(0.0001, time);
-    bodyGain.gain.exponentialRampToValueAtTime(1.75, time + 0.003);
-    bodyGain.gain.exponentialRampToValueAtTime(0.52, time + 0.035);
-    bodyGain.gain.exponentialRampToValueAtTime(0.0001, time + STOMP_DURATION_SECONDS);
+      // high-passed noise burst = beater hitting the head
+      const noise = Math.random() * 2 - 1;
+      const beater = (noise - lastNoise) * 0.22 * Math.exp(-t / 0.0025);
+      lastNoise = noise;
 
-    thump.buffer = this.getNoiseBuffer(ctx);
-    thumpFilter.type = 'bandpass';
-    thumpFilter.frequency.value = 950;
-    thumpFilter.Q.value = 0.95;
-    thumpGain.gain.setValueAtTime(0.0001, time);
-    thumpGain.gain.exponentialRampToValueAtTime(0.85, time + 0.0015);
-    thumpGain.gain.exponentialRampToValueAtTime(0.0001, time + 0.03);
-
-    body.connect(bodyFilter);
-    bodyFilter.connect(bodyGain);
-    bodyGain.connect(this.stompBus!);
-    thump.connect(thumpFilter);
-    thumpFilter.connect(thumpGain);
-    thumpGain.connect(this.stompBus!);
-
-    body.start(time);
-    body.stop(time + STOMP_DURATION_SECONDS + 0.02);
-    thump.start(time);
-    thump.stop(time + 0.03);
-  }
-
-  private getNoiseBuffer(ctx: AudioContext) {
-    if (!this.noiseBuffer) {
-      const length = Math.floor(ctx.sampleRate * 0.025);
-      this.noiseBuffer = ctx.createBuffer(1, length, ctx.sampleRate);
-      const data = this.noiseBuffer.getChannelData(0);
-      for (let i = 0; i < length; i += 1) {
-        data[i] = (Math.random() * 2 - 1) * (1 - i / length);
-      }
+      const attack = Math.min(1, t / 0.0008);
+      const sample = Math.tanh(drive * (body + beater) * attack) / Math.tanh(drive);
+      data[i] = sample;
+      peak = Math.max(peak, Math.abs(sample));
     }
-    return this.noiseBuffer;
+    // fade the tail to avoid a cut-off click, then normalise
+    const fade = Math.floor(rate * 0.03);
+    for (let i = 0; i < length; i += 1) {
+      const tail = i > length - fade ? (length - i) / fade : 1;
+      data[i] = (data[i] / peak) * 0.95 * tail;
+    }
+
+    this.kickBuffer = buffer;
+    return buffer;
   }
 }
 
