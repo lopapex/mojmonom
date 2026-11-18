@@ -280,6 +280,49 @@ input[type="range"].volume-slider {
 .pulse-halo,
 .pulse-ring,
 .pulse-core,
+.needle,
+.needle-tip {
+  transition: transform 420ms var(--press), opacity 420ms ease;
+}
+
+.is-running .pulse-halo,
+.is-running .pulse-ring,
+.is-running .pulse-core,
+.is-running .needle,
+.is-running .needle-tip {
+  transition: none;
+  will-change: transform, opacity;
+}
+
+.pulse-halo,
+.pulse-ring {
+  position: absolute;
+  aspect-ratio: 1;
+  border-radius: 50%;
+}
+
+.pulse-halo {
+  width: 86%;
+  border: 2px solid rgba(var(--ink-rgb), 0.18);
+  background: rgba(var(--ink-rgb), 0.04);
+  opacity: 0;
+  transform: scale(0.92);
+}
+
+.pulse-ring {
+  width: 78%;
+  border: 2.5px solid rgba(var(--ink-rgb), 0.62);
+  background: rgba(var(--ink-rgb), 0.035);
+  opacity: 0.24;
+}
+
+.pulse-core {
+  width: 30px;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--ink);
+}
+
 .needle-view {
   container-type: size;
 }
